@@ -1,0 +1,1169 @@
+```{r setup, include=FALSE}
+# packages to be installed 
+install_and_load_packages <- function() {
+  # List of packages to be installed and loaded
+  packages <- c(
+    "labelled",
+    "rstatix",
+    "ggpubr",
+    "GGally",
+    "car",
+    "Epi",
+    "lme4",
+    "lmerTest",
+    "emmeans",
+    "multcomp",
+    "geepack",
+    "ggeffects",
+    "gt",
+    "readxl",
+    "data.table",
+    "tidyverse",
+    "summarytools",
+    "ggplot2",
+    "dplyr",
+    "lubridate",
+    "readr",
+    "stringr",
+    "tibble",
+    "naniar",
+    "NHANES",
+    "forcats",
+    "moments"
+  )
+  
+  # Install packages that are not already installed
+  installed_packages <- installed.packages()
+  for (pkg in packages) {
+    if (!(pkg %in% installed_packages[, "Package"])) {
+      install.packages(pkg)
+    }
+  }
+  
+  # Load all the packages
+  lapply(packages, library, character.only = TRUE)
+}
+
+# Run the function to install and load all packages
+install_and_load_packages()
+
+#Relevant libraries for use in this data 
+library(labelled)   # This is used to labeling data
+library(rstatix)    # This is used for summary statistics
+library(ggpubr)     # This is used for convenient summary statistics and plots
+library(GGally)     # This is used for advanced plot
+library(car)        # This is used for useful for anova/wald test
+library(Epi)        # This is used for easy getting CI for model coef/pred
+library(lme4)       # This is used for linear mixed-effects models
+library(lmerTest)   # This is used for test for linear mixed-effects models
+library(emmeans)    # This is used for marginal means
+library(multcomp)   # This is used for CI for linear combinations of model coef
+library(geepack)    # This is used for generalized estimating equations
+library(ggeffects)  # This is used for marginal effects, adjusted predictions
+library(gt)         # This is used for nice tables
+library(readxl)     # This is used for reading Excel files
+library(data.table) # This is used for fast data manipulation
+library(tidyverse)  # for data manipulation and visualization
+library(summarytools) # This is used for detailed summary statistics
+library(ggplot2)    # This is used for data visualization
+library(dplyr)      #This is used  for data manipulation
+library(lubridate)  # This is used for date-time manipulation
+library(readr)      # This is used for reading data
+library(stringr)    # This is used for string manipulation
+library(tibble)     # This is used for modern data frames
+library(naniar)     # This is used for handling missing data
+library(NHANES)     # This is used for accessing NHANES data
+library(forcats)    # This is used for working with categorical variables
+library(moments)
+```
+
+# Step 1
+# This is the importation of the longitudinal data and turning it into a dataframe 
+```{r}
+# DATA IMPORTATION 
+longi_data <- read.csv("C:/Users/aoogbomo/OneDrive - University of Bradford/Desktop/mimiproject/ageing_better_cmf.csv", header = TRUE, stringsAsFactors = FALSE)
+head(longi_data)
+```
+# Check the summary and the structure of the data
+```{r}
+summary(longi_data)
+str(longi_data)
+```
+
+# Convert all the -1 to NA within the large Data frame
+```{r}
+# To work with this data we first convert all the -1 to NA as specified by the data dictionary 
+longi_new_data<- longi_data %>%
+  mutate(across(everything(), ~ {
+    ifelse(. == -1 | . == "-1", NA, .)
+  }))
+longi_new_data
+glimpse(longi_new_data)
+```
+# looping the longi_new_data
+```{r}
+for (col_name in colnames(longi_new_data)) {
+  # Create a bar chart for the current column
+  p <- ggplot(longi_new_data, aes_string(x = col_name)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", col_name)) +
+    xlab(col_name) +
+    ylab("Count")
+  
+  # Print the plot
+  print(p)
+}
+```
+# Remove columns with 100% missing values or NA 
+```{r}
+# Remove columns with 100% NA values
+longi_new_data_clean <- longi_new_data %>%
+  select(where(~ !all(is.na(.))))
+
+# View the cleaned dataframe
+print(head(longi_new_data_clean))
+
+# Check the columns that were removed
+removed_columns <- setdiff(names(longi_new_data), names(longi_new_data_clean))
+cat("Removed columns with 100% NA values:\n")
+print(removed_columns)
+```
+```{r}
+variable_classes <- sapply(longi_new_data_clean, class)
+print(variable_classes)
+```
+
+
+# Step 2. The first partition will be the Response variables
+```{r}
+# We set what we know as the Response variables and sebset them from the main data
+response_columns<- c("DEJONGscore", "DEJONG_FUp1_Score", "DEJONG_FUp2_Score", 
+                       "DEJONG_FUp3_Score", "DEJONG_FUp4_Score", "DEJONG_FUp5_Score",
+                       "UCLA1Average", "UCLA_Fup1_Average", "UCLA_FUp2_Average", 
+                       "UCLA_FUp3_Average", "UCLA_FUp4_Average", "UCLA_FUp5_Average",
+                       "EQVASScore", "EQVAS_FUp1_score", "EQVAS_FUp2_score", 
+                       "EQVAS_FUp3_score", "EQVAS_FUp4_score", "EQVAS_FUp5_score",
+                       "SWEMWBSScore", "SWEMWBS_FUp1_score_num", "SWEMWBS_FUp2_score_num", 
+                       "SWEMWBS_FUp3_score_num", "SWEMWBS_FUp4_score_num", "SWEMWBS_FUp5_score_num")
+
+# Subset the data frame
+Response <- longi_new_data_clean %>% select(all_of(response_columns))
+
+# View the subsetted data frame
+print(Response)
+```
+
+# what are the classes present in the response
+```{r}
+classes_Response <- sapply(Response, class)
+print(classes_Response)
+```
+
+
+# This is the  exploratory data analysis for the response variables here we first draw a barplot to visualise the response variables 
+```{r}
+for (col_name in colnames(Response)) {
+  # Create a bar chart for the current column
+  p <- ggplot(Response, aes_string(x = col_name)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", col_name)) +
+    xlab(col_name) +
+    ylab("Count")
+  
+  # Print the plot
+  print(p)
+}
+```
+# we proceed with a histogram and divide the response into bins, because from the above we recognise that this is a numerical variable.  
+```{r}
+# Loop through each column in the data frame
+# Load necessary library
+library(ggplot2)
+
+# Loop through each column in the data frame
+for (col_name in colnames(Response)) {
+  
+  # Convert the column to numeric if it's not already
+  numeric_column <- as.numeric(as.character(Response[[col_name]]))
+  
+  # Handle any NA values generated during conversion
+  numeric_column <- numeric_column[!is.na(numeric_column)]
+  
+  # Create a histogram for the numeric data, grouped into bins
+  p <- ggplot(data.frame(numeric_column), aes(x = numeric_column)) +
+    geom_histogram(binwidth = diff(range(numeric_column)) / 30, fill = "blue", color = "black") +
+    ggtitle(paste("Histogram of", col_name, " (binned)")) +
+    xlab(col_name) +
+    ylab("Frequency")
+  
+  # Print the plot
+  print(p)
+}
+```
+# The next step is to test for normality , Skewness,Kurtosis
+```{r}
+# Loop through each column in the data frame
+for (col_name in colnames(Response)) {
+  
+  # Convert the column to numeric if it's not already
+  numeric_column <- as.numeric(as.character(Response[[col_name]]))
+  
+  # Remove NA values
+  numeric_column <- numeric_column[!is.na(numeric_column)]
+  
+  # Skip the test if the column has fewer than 3 unique values
+  if(length(unique(numeric_column)) < 3) {
+    cat("Skipping", col_name, "- not enough unique values.\n")
+    next
+  }
+  
+  cat("\nTesting column:", col_name, "\n")
+  
+  # Summary Statistics
+  cat("Summary Statistics:\n")
+  print(summary(numeric_column))
+  cat("Skewness:", skewness(numeric_column), "\n")
+  cat("Kurtosis:", kurtosis(numeric_column), "\n")
+  
+  # Shapiro-Wilk Test for Normality
+  if (length(numeric_column) >= 3 & length(numeric_column) <= 5000) {
+    cat("Shapiro-Wilk Normality Test:\n")
+    tryCatch({
+      print(shapiro.test(numeric_column))
+    }, error = function(e) {
+      cat("Error in Shapiro-Wilk Test:", e$message, "\n")
+    })
+  } else {
+    cat("Skipping Shapiro-Wilk Test: Sample size not between 3 and 5000.\n")
+  }
+  
+  # Q-Q Plot
+  qqnorm(numeric_column, main = paste("Q-Q Plot of", col_name))
+  qqline(numeric_column, col = "red")
+  
+  # Breusch-Pagan Test for Homoscedasticity
+  # First, fit a linear model (assuming the dependent variable is numeric_column)
+  lm_model <- lm(numeric_column ~ 1)
+  cat("Breusch-Pagan Test for Homoscedasticity:\n")
+  tryCatch({
+    print(bptest(lm_model))
+  }, error = function(e) {
+    cat("Error in Breusch-Pagan Test:", e$message, "\n")
+  })
+  
+  cat("\n----------------------------\n")
+}
+
+```
+
+# We go futher to explore the response by the Gender 
+```{r}
+# we first convert to the long format.
+longi_new_data_long <- longi_new_data_clean %>%
+  pivot_longer(cols = all_of(response_columns), 
+               names_to = "Response_Variable", 
+               values_to = "Value")
+
+# Loop through each column in the response columns and plot
+for (col_name in response_columns) {
+  # Filter the data for the current response variable
+  plot_data <- longi_new_data_long %>% filter(Response_Variable == col_name)
+  
+  # Create a bar chart colored by Gender
+  p <- ggplot(plot_data, aes(x = Response_Variable, y = Value, fill = interaction(Gender))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ggtitle(paste("Bar Chart of", col_name, "coloured by Gender")) +
+    xlab(col_name) +
+    ylab("Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+  # Print the plot
+  print(p)
+}
+```
+
+```{r}
+# Loop through each response variable column and plot
+for (col_name in response_columns) {
+  # Filter the data for the current response variable
+  plot_data <- longi_new_data_long %>% filter(Response_Variable == col_name)
+  
+  # Create a bar chart colored by Gender
+  p <- ggplot(plot_data, aes(x = Value, fill = Gender)) +
+    geom_bar(position = "dodge") +
+    ggtitle(paste("Bar Chart of", col_name, "by Gender")) +
+    xlab(col_name) +
+    ylab("Count") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+  # Print the plot
+  print(p)
+}
+```
+
+
+# We explore the interaction of response varable with the birth year 
+```{r}
+# Loop through each column in the response columns and plot
+for (col_name in response_columns) {
+  # Filter the data for the current response variable
+  plot_data <- longi_new_data_long %>% filter(Response_Variable == col_name)
+  
+  # Create a bar chart colored by Birthyear_7Categories
+  p <- ggplot(plot_data, aes(x = Response_Variable, y = Value, fill = interaction(Birthyear_7Categories))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ggtitle(paste("Bar Chart of", col_name, "Birthyear_7Categories")) +
+    xlab(col_name) +
+    ylab("Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+  # Print the plot
+  print(p)
+}
+```
+
+# We explore the interaction of response varable with the Ethnicity
+
+```{r}
+# Loop through each column in the response columns and plot the interaction with the Ethnic_5Categories
+for (col_name in response_columns) {
+  # Filter the data for the current response variable
+  plot_data <- longi_new_data_long %>% filter(Response_Variable == col_name)
+  
+  # Create a bar chart colored by Ethnic_5Categories
+  p <- ggplot(plot_data, aes(x = Response_Variable, y = Value, fill = interaction(Ethnic_5Categories))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ggtitle(paste("Bar Chart of", col_name, "Ethnicity")) +
+    xlab(col_name) +
+    ylab("Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+  # Print the plot
+  print(p)
+} 
+```
+
+# We explore the interaction of response varable with  Sexuality
+```{r}
+# Loop through each column in the response columns and plot
+for (col_name in response_columns) {
+  # Filter the data for the current response variable
+  plot_data <- longi_new_data_long %>% filter(Response_Variable == col_name)
+  
+  # Create a bar chart colored by Sexuality
+  p <- ggplot(plot_data, aes(x = Response_Variable, y = Value, fill = interaction(Sexuality_2Categories))) +
+    geom_bar(stat = "identity", position = "dodge") +
+    ggtitle(paste("Bar Chart of", col_name, "Birthyear_7Categories")) +
+    xlab(col_name) +
+    ylab("Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+  # Print the plot
+  print(p)
+}
+```
+
+
+```{r}
+# Thats the first part of the exploratory data analysis between response variable and some of the demographic,#
+# next  o the next part which is manipulating the dataset 
+```
+
+
+# Step 3 is the Second partition will be the  activity_start_enddate 
+```{r}
+month_start_end_cols <- grep("MonthStart|MonthEnd", names(longi_new_data_clean), value = TRUE)
+# Subset the data frame to include only these columns
+activity_start_enddate <- longi_new_data_clean[, month_start_end_cols]
+print(activity_start_enddate)
+```
+
+```{r}
+activity_start_enddate
+```
+
+
+```{r}
+start_end_columns=colnames(activity_start_enddate)
+```
+
+```{r}
+str(activity_start_enddate)
+```
+
+```{r}
+summary(activity_start_enddate)
+```
+
+```{r}
+# Loop through each column and count the values
+for (col_name in colnames(activity_start_enddate)) {
+  cat("Counts for column:", col_name, "\n")
+  print(table(activity_start_enddate[[col_name]]))
+  cat("\n")
+}
+```
+
+```{r}
+# Using lapply to check unique values for each column
+unique_values <- lapply(activity_start_enddate, unique)
+
+# Print unique values for each column
+for (col_name in names(unique_values)) {
+  cat("Unique values for column:", col_name, "\n")
+  print(unique_values[[col_name]])
+  cat("\n")
+}
+activity_start_enddate %>%
+  gather(key = "col_variable", value = "value") %>%
+  group_by(col_variable) %>%
+  summarise(unique_values = n_distinct(value)) %>%
+  arrange(col_variable)
+```
+
+
+```{r}
+glimpse(unique_values)
+```
+
+
+```{r}
+# 
+# Initialize a new dataframe to store the differences
+difference_in_days <- data.frame(matrix(ncol = 0, nrow = nrow(activity_start_enddate)))
+
+# Loop through the columns to identify pairs with MonthStart and MonthEnd
+for (col_name in names(activity_start_enddate)) {
+  if (grepl("MonthStart$", col_name)) {
+    prefix <- sub("MonthStart$", "", col_name)
+    start_col <- paste0(prefix, "MonthStart")
+    end_col <- paste0(prefix, "MonthEnd")
+    
+    if (start_col %in% names(activity_start_enddate) && end_col %in% names(activity_start_enddate)) {
+      # Convert date strings to Date format
+      start_dates <- ymd(paste0(activity_start_enddate[[start_col]], "-01"), quiet = TRUE)
+      end_dates <- ymd(paste0(activity_start_enddate[[end_col]], "-01"), quiet = TRUE)
+      
+      # Calculate the difference in months, ensuring NA is returned if any date is NA
+      date_diff <- ifelse(is.na(start_dates) | is.na(end_dates), NA, interval(start_dates, end_dates) %/% months(1))
+      
+      # Create a new column name for the difference with _diff suffix
+      diff_col_name <- paste0(sub("_MonthStart$", "", start_col), "_diff")
+      
+      # Add the difference to the new dataframe
+      difference_in_days[[diff_col_name]] <- date_diff
+    }
+  }
+}
+
+# Print the new dataframe with the differences
+print(difference_in_days)
+```
+
+
+
+
+
+
+```{r}
+# Using lapply to check unique values for each column
+unique_value_dif <- lapply(difference_in_days, unique)
+
+# Print unique values for each column
+for (col_name in names(unique_value_dif)) {
+  cat("Unique values for column:", col_name, "\n")
+  print(unique_value_dif[[col_name]])
+  cat("\n")
+}
+activity_start_enddate %>%
+  gather(key = "col_variable", value = "value") %>%
+  group_by(col_variable) %>%
+  summarise(unique_value_dif = n_distinct(value)) %>%
+  arrange(col_variable)
+```
+
+```{r}
+#EDA to explore the plot of the difference in columns. 
+# Clean column names
+colnames(difference_in_days) <- make.names(colnames(difference_in_days))
+# Loop through each column and plot a bar chart
+for (col_name in colnames(difference_in_days)) {
+  # Convert column to factor if it's not already
+  if (!is.factor(difference_in_days[[col_name]])) {
+   difference_in_days[[col_name]] <- as.factor(difference_in_days[[col_name]])
+  }
+  
+# Create a bar chart for the current column
+  p <- ggplot(difference_in_days, aes_string(x = col_name)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", col_name)) +
+    xlab(col_name) +
+    ylab("Count") +
+    theme(axis.text.x = element_text(size = 9, angle = 45, hjust = 1)) +  # Rotate x-axis text
+    theme(plot.margin = margin(10, 10, 10, 100)) +  # Add larger margin to avoid clipping
+    theme(axis.title.x = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)))  # Increase x-axis title margin
+  
+  # Print the plot
+  print(p)
+}
+```
+
+```{r}
+colnames(difference_in_days) <- make.names(colnames(difference_in_days))
+
+# Loop through each column and plot a histogram
+for (col_name in colnames(difference_in_days)) {
+  # Convert column to numeric if it's not already
+  if (!is.numeric(difference_in_days[[col_name]])) {
+    difference_in_days[[col_name]] <- as.numeric(difference_in_days[[col_name]])
+  }
+  
+  # Create a histogram for the current column
+  p <- ggplot(difference_in_days, aes_string(x = col_name)) +
+    geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+    ggtitle(paste("Histogram of", col_name)) +
+    xlab(col_name) +
+    ylab("Frequency") +
+    theme(axis.text.x = element_text(size = 9, angle = 45, hjust = 1)) +  # Rotate x-axis text
+    theme(plot.margin = margin(10, 10, 10, 10))  # Add larger margin to avoid clipping
+  
+  # Print the plot
+  print(p)
+}
+
+```
+
+
+```{r}
+# Initialize a new dataframe to store the 1/0 values
+binary_df <- data.frame(matrix(ncol = 0, nrow = nrow(activity_start_enddate)))
+
+# Loop through the columns to identify pairs with MonthStart and MonthEnd
+for (col_name in names(activity_start_enddate)) {
+  if (grepl("MonthStart$", col_name)) {
+    prefix <- sub("MonthStart$", "", col_name)
+    start_col <- paste0(prefix, "MonthStart")
+    end_col <- paste0(prefix, "MonthEnd")
+    
+    if (start_col %in% names(activity_start_enddate) && end_col %in% names(activity_start_enddate)) {
+      # Create a new column with 1 if both MonthStart and MonthEnd have date values, 0 if MonthStart is NA
+      presence_col <- ifelse(!is.na(activity_start_enddate[[start_col]]) & !is.na(activity_start_enddate[[end_col]]), 1, 0)
+      
+      # Create a new column name for the presence check with _presence suffix
+      presence_col_name <- paste0(sub("_MonthStart$", "", start_col), "_binary")
+      
+      # Add the presence column to the new dataframe
+      binary_df[[presence_col_name]] <- presence_col
+    }
+  }
+}
+
+# Print the new dataframe with the presence columns
+print(binary_df) 
+```
+
+```{r}
+# Using lapply to check unique values for each column
+unique_value_bin <- lapply(binary_df, unique)
+
+# Print unique values for each column
+for (col_name in names(unique_value_bin)) {
+  cat("Unique values for column:", col_name, "\n")
+  print(unique_value_bin[[col_name]])
+  cat("\n")
+}
+activity_start_enddate %>%
+  gather(key = "col_variable", value = "value") %>%
+  group_by(col_variable) %>%
+  summarise(unique_value_bin = n_distinct(value)) %>%
+  arrange(col_variable)
+```
+
+
+```{r}
+#EDA to explore the plot of the difference in columns. 
+# Clean column names
+colnames(binary_df) <- make.names(colnames(binary_df))
+# Loop through each column and plot a bar chart
+for (col_name in colnames(binary_df)) {
+  # Convert column to factor if it's not already
+  if (!is.factor(binary_df[[col_name]])) {
+    binary_df[[col_name]] <- as.factor(binary_df[[col_name]])
+  }
+  
+# Create a bar chart for the current column
+  p <- ggplot(binary_df, aes_string(x = col_name)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", col_name)) +
+    xlab(col_name) +
+    ylab("Count") +
+    theme(axis.text.x = element_text(size = 9, angle = 45, hjust = 1)) +  # Rotate x-axis text
+    theme(plot.margin = margin(10, 10, 10, 100)) +  # Add larger margin to avoid clipping
+    theme(axis.title.x = element_text(margin = margin(t = 10, r = 10, b = 10, l = 10)))  # Increase x-axis title margin
+  
+  # Print the plot
+  print(p)
+}
+```
+
+
+
+
+#Step 4; 
+# The other columns in the dataframe are yet to be class as interventions or cofounding factors or droped out after proper exploration so we name it as longi_new_data_clean_r
+
+# Remove the 'response' column
+```{r}
+longi_new_data_clean_r<- longi_new_data_clean %>% select(-response_columns)
+longi_new_data_clean_r
+```
+
+# validate that the response columns are gone from the longi_new_data_clean
+
+```{r}
+columns_to_check <- c("DEJONGscore", "DEJONG_FUp1_Score", "DEJONG_FUp2_Score", 
+                      "DEJONG_FUp3_Score", "DEJONG_FUp4_Score", "DEJONG_FUp5_Score",
+                      "UCLA1Average", "UCLA_Fup1_Average", "UCLA_FUp2_Average", 
+                      "UCLA_FUp3_Average", "UCLA_FUp4_Average", "UCLA_FUp5_Average",
+                      "EQVASScore", "EQVAS_FUp1_score", "EQVAS_FUp2_score", 
+                      "EQVAS_FUp3_score", "EQVAS_FUp4_score", "EQVAS_FUp5_score",
+                      "SWEMWBSScore", "SWEMWBS_FUp1_score_num", "SWEMWBS_FUp2_score_num", 
+                      "SWEMWBS_FUp3_score_num", "SWEMWBS_FUp4_score_num", "SWEMWBS_FUp5_score_num")
+
+# Check which columns are present in the longi_new_data_clean_r dataframe
+present_columns <- columns_to_check[columns_to_check %in% names(longi_new_data_clean_r)]
+
+# Print the result
+if (length(present_columns) > 0) {
+  cat("The following columns from Response dataframe are present in longi_new_data_clean_r:\n")
+  print(present_columns)
+} else {
+  cat("None of the specified columns from Response dataframe are present in longi_new_data_clean_r.\n")
+}
+```
+
+# Now we remove the activity start and end date from the new dataframe to arrive at a column without both response, ens and start date. 
+```{r}
+start_end_columns=colnames(activity_start_enddate)
+longi_new_data_clean_r_e <-longi_new_data_clean_r %>% select(-start_end_columns)
+longi_new_data_clean_r_e
+```
+
+
+```{r}
+# Check which columns are present in the longi_new_data_clean_r dataframe
+present_date_columns <- start_end_columns[start_end_columns %in% names(longi_new_data_clean_r_e)]
+
+# Print the result
+if (length(present_date_columns) > 0) {
+  cat("The following columns from activity_start_enddate dataframe are present in longi_new_data_clean_r_e:\n")
+  print(present_date_columns)
+} else {
+  cat("None of the specified columns from activity_start_enddate dataframe are present in longi_new_data_clean_r_e.\n")
+}
+```
+
+```{r}
+ longi_new_data_clean_r_e
+
+```
+
+#############################################################################
+```{r}
+# Clean column names
+colnames(longi_new_data_clean_r_e) <- make.names(colnames(longi_new_data_clean_r_e))
+# Loop through each column and plot a bar chart
+for (col_name in colnames(longi_new_data_clean_r_e)) {
+  # Convert column to factor if it's not already
+  if (!is.factor(longi_new_data_clean_r_e[[col_name]])) {
+    longi_new_data_clean_r_e[[col_name]] <- as.factor(longi_new_data_clean_r_e[[col_name]])
+  }
+  #############
+  # Create a bar chart for the current column
+  p <- ggplot(longi_new_data_clean_r_e, aes_string(x = col_name)) +
+    geom_bar() +
+    ggtitle(paste("Bar Chart of", col_name)) +
+    xlab(col_name) +
+    ylab("Count")
+  
+  # Print the plot
+  print(p)
+}
+```
+# here we have our dataframe broken down into four dataframe from where we will do another EDA to make some determinations. 
+```{r}
+
+# we concatenate the dataframe
+# Data without start and end month
+longi_new_data_clean_r_e
+# Data with only the duration of treatment in days 
+difference_in_days
+binary_df
+Response 
+```
+
+# We concatenate this dataframes are named Response, difference_in_days, binary_df, and class_age_data into a new big dataframe for our analysis
+```{r}
+# Concatenate the dataframes by columns
+combined_longi <- cbind(Response, difference_in_days, binary_df, longi_new_data_clean_r_e)
+
+# Display the concatenated dataframe
+print(combined_longi)
+
+```
+
+
+
+
+# Firstly we convert the date of birth to years in the new wangeled data
+
+
+```{r}
+# first we handle the "Birthyear_7Categories" column by finding the categories, this is to enable us determine the age range
+unique_Birthyear_7Categories <- unique(combined_longi$Birthyear_7Categories)
+
+print(unique_Birthyear_7Categories)
+```
+
+
+```{r}
+#By using this categories ("1920-1929"      "1930-1939"      "1940-1949"      "1950-1959"      "1960-1969"      NA               "1970 and after" "Before 1920") we will create a category that we can use to mutate the combined_longi to create a new dataframe longi_new_data
+
+
+# Define the replacement function
+replace_birthyear_categories <- function(category) {
+  case_when(
+    category == "1920-1929" ~ "100-91",
+    category == "1930-1939" ~ "90-81",
+    category == "1940-1949" ~ "80-71",
+    category == "1950-1959" ~ "70-61",
+    category == "1960-1969" ~ "60-51",
+    is.na(category) ~ NA_character_,
+    category == "1970 and after" ~ "50-0",
+    category == "Before 1920" ~ ">100",
+    TRUE ~ category  # 
+  )
+}
+# Apply the replacement function to the column
+longi_new_data <- combined_longi %>%
+mutate(Age_Range = replace_birthyear_categories(Birthyear_7Categories))
+```
+
+```{r}
+#drop the "Birthyear_7Categories" column and bring the Age_Range forward to the second position. 
+# to acheive this we make use of the replacement function
+longi_new_data  <- longi_new_data  %>%
+  mutate(Age_Range = replace_birthyear_categories(Birthyear_7Categories)) %>%
+  select(-Birthyear_7Categories) %>%  # Drop the Birthyear_7Categories column
+  select(1, Age_Range, everything())  # Move Age_Range to the second position
+
+# Print the updated data frame
+print(longi_new_data)
+```
+  
+  
+
+  
+ 
+
+
+
+# The next stage will know the response  and the duration
+```{r}
+# We set what we know as the Response variables and sebset them from the main data
+mean_response_columns<- c("DEJONGscore","UCLA1Average","EQVASScore","SWEMWBSScore")
+
+# Subset the data frame
+mean_response_columns<- longi_new_data_clean %>% select(all_of(mean_response_columns))
+
+# View the subsetted data frame
+print(mean_response_columns)
+```
+
+
+
+```{r}  
+str(Response)
+# Get the data types of each column
+data_types <- sapply(Response, class)
+# Print the data types
+print(data_types)
+```
+
+
+ 
+
+
+
+
+# Reshape Data for longitudinal analysis 
+
+
+```{r}
+# Reshape data from wide to long format
+Response_long_data <- Response %>%
+  pivot_longer(
+    cols = everything(), # Convert all columns
+    names_to = "Measurement",
+    values_to = "Score"
+  ) %>%
+  mutate(
+    Year = case_when(
+      str_detect(Measurement, "FUp1|Fup1") ~ "Year 1",
+      str_detect(Measurement, "FUp2|Fup2") ~ "Year 2",
+      str_detect(Measurement, "FUp3|Fup3") ~ "Year 3",
+      str_detect(Measurement, "FUp4|Fup4") ~ "Year 4",
+      str_detect(Measurement, "FUp5|Fup5") ~ "Year 5",
+      TRUE ~ "Baseline"  # Default to Baseline if no FUp pattern matched
+    )
+  )
+
+# View reshaped data
+print(Response_long_data)
+```
+
+
+```{r}
+group_by(Response_long_data, Year) %>% 
+  get_summary_stats(Score)
+```
+
+# 
+
+```{r}
+# make a box plot for the distribution of the response 
+p <- ggplot(Response_long_data, aes(x = Measurement, y = Score, fill = Measurement)) +
+  geom_boxplot(width = 0.75) +  # Increase the width of the box plots to make them more prominent
+  geom_jitter(width = 0.2, alpha = 0.5, color = "black") +  # Enhance jitter visibility
+  theme_minimal() +
+  guides(fill = FALSE) +  # Turn off the legend for fill
+  labs(x = "", y = "Score", title = "Distribution of Scores by Measurement") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 12),  # Rotate and adjust text size
+    plot.title = element_text(size = 16, hjust = 0.5),  # Center and enlarge the title
+    axis.title = element_text(size = 14)  # Enlarge axis titles
+  )
+
+# Print the plot
+print(p)
+
+```
+
+```{r}
+# Create a new column for the Metric name
+Response_long_data <- Response_long_data %>%
+  mutate(Metric = ifelse(grepl("FUp", Measurement), 
+                         sub("_.*", "", Measurement), 
+                         Measurement))
+
+# Calculate the mean score for each year
+mean_scores <- Response_long_data %>%
+  group_by(Year) %>%
+  summarise(MeanScore = mean(Score, na.rm = TRUE)) %>%
+  arrange(factor(Year, levels = c('Baseline', 'Year 1', 'Year 2', 'Year 3', 'Year 4', 'Year 5')))
+
+ggplot(mean_scores, aes(x = Year, y = MeanScore, group = 1)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Mean Response Over Time", x = "Year", y = "Mean Score") +
+  theme_minimal()
+
+```
+
+```{r}
+
+
+# Group by Year and Metric, then calculate the mean and confidence intervals
+mean_scores <- Response_long_data %>%
+  filter(grepl("FUp", Measurement)) %>%  # Filter only the FUp measurements
+  group_by(Year, Metric) %>%  # Group by Year and Metric (extracted earlier)
+  summarise(mean = mean(Score, na.rm = TRUE),
+            ymin = mean(Score, na.rm = TRUE) - 1.96 * sd(Score, na.rm = TRUE) / sqrt(n()),
+            ymax = mean(Score, na.rm = TRUE) + 1.96 * sd(Score, na.rm = TRUE) / sqrt(n()), 
+            .groups = "drop") %>%
+  ungroup() %>%
+  mutate(Year_numeric = as.numeric(gsub("Year ", "", Year)) - 0.05 + 0.05 * (Metric == "Boy"))  # Adjust for year visualization
+
+# Plot the data
+ggplot(mean_scores, aes(x = Year_numeric, y = mean, col = Metric, shape = Metric)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = ymin, ymax = ymax), width = 0.2) +
+  geom_line() +
+  labs(title = "Response Trajectories over time", x = "Year", y = "Mean Score", shape = "Metric", col = "Metric") +
+  theme_minimal()
+```
+
+
+```{r}
+# Filter the data to include only follow-up measurements
+fup_data <- Response_long_data %>%
+  filter(grepl("FUp", Measurement))
+
+# Extract the year number for grouping
+fup_data <- fup_data %>%
+  mutate(YearNumber = factor(sub(".*FUp([1-5]).*", "\\1", Measurement)))
+
+# Calculate the mean score for each year
+mean_scores <- fup_data %>%
+  group_by(YearNumber) %>%
+  summarise(MeanScore = mean(Score, na.rm = TRUE))
+
+# Plot the mean scores for each follow-up year
+ggplot(mean_scores, aes(x = YearNumber, y = MeanScore)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Mean Scores for Each Follow-Up Year", x = "Year", y = "Mean Score") +
+  theme_minimal()
+```
+
+```{r}
+# Reshape the data to long format
+Response_long_data <- Response %>%
+  pivot_longer(cols = starts_with("DEJONG") | starts_with("UCLA") | starts_with("EQVAS") | starts_with("SWEMWBS"), 
+               names_to = "Measurement", values_to = "Score") %>%
+  mutate(YearNumeric = case_when(
+    grepl("FUp1", Measurement) ~ 1,
+    grepl("FUp2", Measurement) ~ 2,
+    grepl("FUp3", Measurement) ~ 3,
+    grepl("FUp4", Measurement) ~ 4,
+    grepl("FUp5", Measurement) ~ 5,
+    TRUE ~ 0  # This is for the baseline or first year measurements like DEJONGscore, UCLA1Average, etc.
+  ))
+
+# Filter out the baseline if you want to include only follow-up years
+filtered_data <- Response_long_data %>%
+  filter(YearNumeric > 0) %>%  # Keep only the follow-up data if required
+  drop_na(Score)  # Drop rows where Score is NA
+
+# Plot the data
+ggplot(filtered_data, aes(x = YearNumeric, y = Score, col = Measurement)) +
+  geom_point(na.rm = TRUE) +
+  geom_line(na.rm = TRUE) +
+  facet_wrap(~ Measurement, scales = "free_y") +  # Facet by Measurement
+  labs(x = "Year", y = "Score", col = "Measurement") +
+  guides(col = guide_legend(nrow = 3)) +
+  theme_minimal()
+ 
+```
+
+```{r}
+
+
+
+Response_long_data <- Response_long_data %>%
+  mutate(YearNumeric = case_when(
+    grepl("FUp1", Measurement) ~ 1,
+    grepl("FUp2", Measurement) ~ 2,
+    grepl("FUp3", Measurement) ~ 3,
+    grepl("FUp4", Measurement) ~ 4,
+    grepl("FUp5", Measurement) ~ 5,
+    TRUE ~ NA_real_  # Exclude baseline scores or handle them separately
+  ))
+
+# Filter out rows that don't match the follow-up pattern
+filtered_data <- Response_long_data %>%
+  filter(!is.na(YearNumeric))  # Keep only the follow-up data
+
+# Create the scatter plot
+
+
+
+
+# Replace 'Metric' with the correct column name, likely 'Measurement'
+ggplot(filtered_data, aes(x = Measurement, y = Score, col = Measurement)) +
+  geom_point(size = 3) +  # Scatter plot with points
+  facet_wrap(~ YearNumeric) +  # Facet by YearNumeric
+  labs(x = "Measurement", y = "Score", col = "Measurement") +
+  theme_minimal()
+
+
+```
+
+```{r}
+
+# Reshape the data to long format
+Response_long_data <- Response %>%
+  pivot_longer(
+    cols = starts_with("DEJONG") | starts_with("UCLA") | starts_with("EQVAS") | starts_with("SWEMWBS"), 
+    names_to = "Measurement", values_to = "Score"
+  ) %>%
+  mutate(
+    YearNumeric = case_when(
+      grepl("FUp1", Measurement) ~ 1,
+      grepl("FUp2", Measurement) ~ 2,
+      grepl("FUp3", Measurement) ~ 3,
+      grepl("FUp4", Measurement) ~ 4,
+      grepl("FUp5", Measurement) ~ 5,
+      TRUE ~ 0  # This is for the baseline or first year measurements like DEJONGscore, UCLA1Average 
+    )
+  )
+
+# Filter out the baseline if you want to include only follow-up years
+filtered_data <- Response_long_data %>%
+  filter(YearNumeric > 0) %>%  # Keep only the follow-up data if required
+  drop_na(Score)  # Drop rows where Score is NA
+
+# Plot the data
+ggplot(filtered_data, aes(x = YearNumeric, y = Score, col = factor(Measurement))) +
+  geom_line() +
+  labs(x = "Year", y = "Score", col = "Measurement") +
+  guides(col = guide_legend(nrow = 3)) +
+  theme_minimal()
+
+```
+
+
+# Combined data is combined_longi
+```{r} 
+# longi_new_data is the result of the concatenation
+longi_new_data
+```
+
+# Analysis 
+```{r} 
+#library(tidyr)
+#
+  # The first thing is to convert all the column for transformation to numerical variable 
+# Convert all relevant columns to numeric
+finalda <- longi_new_data %>%
+  mutate(across(starts_with("DEJONG"), as.numeric),
+         across(starts_with("UCLA"), as.numeric),
+         across(starts_with("EQVAS"), as.numeric),
+         across(starts_with("SWEMWBS"), as.numeric))
+```
+
+```{r}
+# Convert all relevant columns to numeric
+finalda <- longi_new_data %>%
+  mutate(across(starts_with("DEJONG"), as.numeric),
+         across(starts_with("UCLA"), as.numeric),
+         across(starts_with("EQVAS"), as.numeric),
+         across(starts_with("SWEMWBS"), as.numeric))
+
+# 
+long_data <- finalda %>%
+  pivot_longer(cols = starts_with("DEJONG") | starts_with("UCLA") | starts_with("EQVAS") | starts_with("SWEMWBS"),
+               names_to = c("Measure", "Time"),
+               names_pattern = "(.*)_(FUp[0-5])",
+               values_to = "Value") %>%
+  mutate(Time = recode(Time, "FUp0" = "Baseline", "FUp1" = "Year1", "FUp2" = "Year2", "FUp3" = "Year3", "FUp4" = "Year4", "FUp5" = "Year5"))
+
+# View the transformed data
+head(long_data)
+```
+```{r} 
+str(long_data)
+```
+```{r} 
+colnames(long_data)
+```
+
+
+
+```{r} 
+
+# Univariate EDA - Histogram
+#library(ggplot2)
+
+ggplot(long_data, aes(x = Value)) +
+  geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+  facet_wrap(~ Measure, scales = "free_x") +
+  theme_minimal() +
+  labs(title = "Distribution of Values for Each Measure")
+
+```
+
+
+
+```{r} 
+# Bivariate EDA - Scatter plot
+ggplot(long_data, aes(x = Time, y = Value, color = Gender)) +
+  geom_point() +
+  facet_wrap(~ Measure) +
+  theme_minimal() +
+  labs(title = "Bivariate Analysis: Value over Time for Each Measure",
+       x = "Time", y = "Value")
+
+
+```
+
+
+
+```{r} 
+summary(long_data)
+long_data <- na.omit(long_data) # Simple removal of rows with NAs
+```
+
+```{r} 
+#Outlier Detection:
+
+#Identify and address outliers which could skew the analysis.
+
+
+boxplot(long_data$Value ~ long_data$Measure)
+
+```
+
+
+```{r} 
+#Correlation Analysis:
+
+#This will be explored after the removal of NA
+#print(cor_matrix)
+```
+
+
+```{r} 
+#Interaction Effects:
+#interaction.plot(long_data$Time, long_data$Measure, long_data$Value)
+```
+
+
+
+```{r} 
+#Dimensionality Reduction
+
+```
+
+
+```{r} 
+library(lme4)
+
+# Initialize lists to store the results
+model_summaries <- list()
+anova_results <- list()
+
+# Loop through each column in longi_new_data_clean_r_e to use as predictors
+for (col_name in colnames(longi_new_data_clean_r_e)) {
+  
+  # Create a formula dynamically using Measure as the response variable
+  formula <- as.formula(paste("Measure ~", col_name, "+ (1 | Ethnic_5Categories)"))
+  
+  # Try fitting the model and catching any errors
+  try({
+    # Fit the mixed-effects model
+    model <- lmer(formula, data = long_data)
+    
+    # Store the summary of the model
+    model_summaries[[col_name]] <- summary(model)
+    
+    # Store the ANOVA results
+    anova_results[[col_name]] <- anova(model)
+    
+    # Print the summary for each model
+    print(paste("Summary for model with predictor:", col_name))
+    print(summary(model))
+    
+    # Print the ANOVA results for each model
+    print(paste("ANOVA for model with predictor:", col_name))
+    print(anova(model))
+  }, silent = TRUE) # This will prevent the loop from stopping if an error occurs
+}
+
+#save(model_summaries, anova_results, file = "model_results.RData")
+
+```
