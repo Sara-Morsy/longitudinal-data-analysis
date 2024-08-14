@@ -54,7 +54,7 @@ library(ggpubr)     # This is used for convenient summary statistics and plots
 library(GGally)     # This is used for advanced plot
 library(car)        # This is used for useful for anova/wald test
 library(Epi)        # This is used for easy getting CI for model coef/pred
-library(lme4)       # This is used for linear mixed-effects models
+library(lme4)       # This is used for linear mixed-effects models                                                              # good one as well
 library(lmerTest)   # This is used for test for linear mixed-effects models
 library(emmeans)    # This is used for marginal means
 library(multcomp)   # This is used for CI for linear combinations of model coef
@@ -67,13 +67,13 @@ library(tidyverse)  # for data manipulation and visualization
 library(summarytools) # This is used for detailed summary statistics
 library(ggplot2)    # This is used for data visualization
 library(dplyr)      #This is used  for data manipulation
-library(lubridate)  # This is used for date-time manipulation
+library(lubridate)  # This is used for date-time manipulation                                  #this one is good as well, have a look at the vignette
 library(readr)      # This is used for reading data
 library(stringr)    # This is used for string manipulation
 library(tibble)     # This is used for modern data frames
-library(naniar)     # This is used for handling missing data
+library(naniar)     # This is used for handling missing data          
 library(NHANES)     # This is used for accessing NHANES data
-library(forcats)    # This is used for working with categorical variables
+library(forcats)    # This is used for working with categorical variables   #check these packages for EDA in case you want to improve this, vignettes are usually good for understanding it
 library(moments)
 ```
 
@@ -129,14 +129,14 @@ cat("Removed columns with 100% NA values:\n")
 print(removed_columns)
 ```
 ```{r}
-variable_classes <- sapply(longi_new_data_clean, class)
+variable_classes <- sapply(longi_new_data_clean, class)                              #well done, GOod step 
 print(variable_classes)
 ```
 
 
 # Step 2. The first partition will be the Response variables
 ```{r}
-# We set what we know as the Response variables and sebset them from the main data
+# We set what we know as the Response variables and sebset them from the main data                           #excellent 
 response_columns<- c("DEJONGscore", "DEJONG_FUp1_Score", "DEJONG_FUp2_Score", 
                        "DEJONG_FUp3_Score", "DEJONG_FUp4_Score", "DEJONG_FUp5_Score",
                        "UCLA1Average", "UCLA_Fup1_Average", "UCLA_FUp2_Average", 
@@ -1167,3 +1167,7 @@ for (col_name in colnames(longi_new_data_clean_r_e)) {
 #save(model_summaries, anova_results, file = "model_results.RData")
 
 ```
+
+
+
+Well done 
